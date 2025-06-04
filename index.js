@@ -38,16 +38,16 @@ async function start(){
     const lowVal = candle[3]; //Low
     const price = parseFloat(candle[4]); //Close
 
-    console.log("Price: " + price);
+    console.log("Preço Atual: " + price);
 
     //Estratégia 1
-    estrategiaPriceCompare(price);
+    //estrategiaPriceCompare(price);
 
     //Estratégia 2
     //estrategiaSMA(data);
 
     //Estratégia 3
-    //estrategiaComparePriceSmaMargem(data, price);
+    estrategiaComparePriceSmaMargem(data, price);
 }
 
 
@@ -67,18 +67,19 @@ function estrategiaPriceCompare(price){
     * Se o preço é menor ou igual ao valor pré definido para compra, então compra
     * Se o preço é maior ou igual ao valor pré definido para venda, então vende
     */
+
+    console.log("Preço Alvo (" + (isOpened ? "SELL" : "BUY") + "): " + (isOpened ? SELL_PRICE : BUY_PRICE));
+
     if(price <= BUY_PRICE && isOpened === false)
     {
-        console.log("comprar");
         newOrder(SYMBOL, QUANTITY, "buy");
     }
     else if(price >= SELL_PRICE && isOpened === true)
     {
-        console.log("vender");
         newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
-        console.log("aguardar");
+        console.log("Aguardar");
     }
 }
 
@@ -90,24 +91,24 @@ function estrategiaSMA(data){
     * Quando a média mais curta corta a mais longa para cima: alta no curto prazo = Compra
     * Quando a média mais curta corta a mais longa para baixo: queda no curto prazo = Vende
     */
+   
+    console.log("Preço Alvo (" + (isOpened ? "SELL" : "BUY") + "): " + (isOpened ? SELL_PRICE : BUY_PRICE));
+
     const sma21 = calcSMA(data);
     const sma12 = calcSMA(data.slice(9));
     console.log("SMA (12): "+sma12);
     console.log("SMA (21): "+sma21);
-    console.log("IsOpened:" + isOpened);
 
     if(sma12 > sma21 && isOpened === false)
     {
-        console.log("comprar");
         newOrder(SYMBOL, QUANTITY, "buy");
     }
     else if(sma12 < sma21 && isOpened === true)
     {
-        console.log("vender");
         newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
-        console.log("aguardar");
+        console.log("Aguardar");
     }
 }
 
@@ -123,18 +124,22 @@ function estrategiaComparePriceSmaMargem(data, price){
     const valorCompra = sma * percentualCompra;
     const valorVenda = sma * percentualVenda;
     
+    console.log(
+        "Preço Alvo ("
+        + (isOpened ? "SELL" : "BUY") + "): "
+        + (isOpened ? parseFloat(valorVenda).toFixed(2) : parseFloat(valorCompra).toFixed(2))
+    );
+
     if(price <= valorCompra && isOpened === false)
     {
-        console.log("comprar");
         newOrder(SYMBOL, QUANTITY, "buy");
     }
     else if(price >= valorVenda && isOpened === true)
     {
-        console.log("vender");
         newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
-        console.log("aguardar");
+        console.log("Aguardar");
     }
 }
 
@@ -142,6 +147,8 @@ async function newOrder(symbol, quantity, side){
     const order = { symbol, quantity, side};
     order.type = "MARKET"; //Tipo de ordem: Mercado
     order.timestamp = Date.now(); //Pega data e hora atual da máquina
+
+    console.log(side == "buy" ? "Comprar" : (side == "sell" ? "Vender" : ""));
 
     const signature = crypto
         .createHmac("sha256", SECRET_KEY)
