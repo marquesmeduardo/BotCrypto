@@ -13,7 +13,7 @@ O bot monitora o preço do Bitcoin a cada 3 segundos e executa ordens de **compr
 
 1. **Comparação de preço fixo**: compra se o valor estiver abaixo de um limite definido e vende se estiver acima;
 2. **Médias móveis (SMA)**: compara a média de curto e longo prazo para detectar cruzamentos;
-3. **Margem sobre a média**: compra se o preço estiver muito abaixo da média, e vende se estiver muito acima.
+3. **Margem sobre a média**: compra se o preço estiver abaixo do percentual pré definido, e vende se estiver acima do percentual.
 
 > Sinta-se livre para testar qualquer uma das estratégias ou implementar a sua própria.
 > Você pode ativar/desativar as estratégias diretamente no código, comentando ou descomentando as linhas dentro da função `start()`.
