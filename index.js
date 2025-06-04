@@ -1,8 +1,15 @@
+require('dotenv').config(); //Carrega as variáveis do .env
+
+const crypto = require("crypto"); //Biblioteca de criptografia nativa do node
 const axios = require("axios"); //Biblioteca para conexão via API
 
-const SYMBOL = "BTCUSDT";
-const BUY_PRICE = 105783.11;
-const SELL_PRICE = 105800;
+const SYMBOL = "BTCUSDT"; //Par que será negociado
+const BUY_PRICE = 105783.11; //Preço de compra
+const SELL_PRICE = 105800; //Preço de venda
+const QUANTITY = "0.0001"; //Quantidade da moeda a ser negociada. Ex: BTC
+
+const API_KEY = process.env.API_KEY;
+const SECRET_KEY = process.env.SECRET_KEY;
 
 /*
 * Spot API URL:
@@ -20,7 +27,7 @@ const API_URL = "https://testnet.binance.vision";
 let isOpened = false; //variável de controle que determina se já está comprado
 
 async function start(){
-    console.log("=============");
+    console.log("================");
     const qtdVelas = "21";
     const interval = "15m";
     const {data} = await axios.get(API_URL + "/api/v3/klines?limit="+qtdVelas+"&interval="+interval+"&symbol=" + SYMBOL);
@@ -37,10 +44,10 @@ async function start(){
     estrategiaPriceCompare(price);
 
     //Estratégia 2
-    estrategiaSMA(data);
+    //estrategiaSMA(data);
 
     //Estratégia 3
-    estrategiaComparePriceSmaMargem(data, price);
+    //estrategiaComparePriceSmaMargem(data, price);
 }
 
 
@@ -63,12 +70,12 @@ function estrategiaPriceCompare(price){
     if(price <= BUY_PRICE && isOpened === false)
     {
         console.log("comprar");
-        isOpened = true;
+        newOrder(SYMBOL, QUANTITY, "buy");
     }
     else if(price >= SELL_PRICE && isOpened === true)
     {
         console.log("vender");
-        isOpened = false;
+        newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
         console.log("aguardar");
@@ -92,12 +99,12 @@ function estrategiaSMA(data){
     if(sma12 > sma21 && isOpened === false)
     {
         console.log("comprar");
-        isOpened = true;
+        newOrder(SYMBOL, QUANTITY, "buy");
     }
     else if(sma12 < sma21 && isOpened === true)
     {
         console.log("vender");
-        isOpened = false;
+        newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
         console.log("aguardar");
@@ -119,15 +126,50 @@ function estrategiaComparePriceSmaMargem(data, price){
     if(price <= valorCompra && isOpened === false)
     {
         console.log("comprar");
-        isOpened = true;
+        newOrder(SYMBOL, QUANTITY, "buy");
     }
     else if(price >= valorVenda && isOpened === true)
     {
         console.log("vender");
-        isOpened = false;
+        newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
         console.log("aguardar");
+    }
+}
+
+async function newOrder(symbol, quantity, side){
+    const order = { symbol, quantity, side};
+    order.type = "MARKET"; //Tipo de ordem: Mercado
+    order.timestamp = Date.now(); //Pega data e hora atual da máquina
+
+    const signature = crypto
+        .createHmac("sha256", SECRET_KEY)
+        .update(new URLSearchParams(order).toString())
+        .digest("hex");
+
+    order.signature = signature;
+
+    try{
+        const {data} = await axios.post(
+            API_URL + "/api/v3/order",
+            new URLSearchParams(order).toString(),
+            {headers: { "X-MBX-APIKEY": API_KEY } }
+        )
+
+        console.log(data);
+        if (side == "buy"){
+            isOpened = true;
+        }
+        else if (side == "sell"){
+            isOpened = false;
+        }
+        console.log("=====SUCESSO====");
+    }
+    catch(err){
+        console.warn("======ERRO======");
+        console.error(err.response.data);
+        isOpened = false;
     }
 }
 
