@@ -32,7 +32,7 @@ O uso é bem simples:
 3. Execute com `node index.js` e o bot começará a monitorar o preço e agir automaticamente.
 
 Exemplo de saída no terminal:
-
+```
 ================
 Price: 105786.55
 aguardar
@@ -43,7 +43,7 @@ comprar
 {
   ...
 }
-
+```
 
 
 > ⚠️ **Atenção:** Este projeto é apenas para **fins educacionais e testes**.  
