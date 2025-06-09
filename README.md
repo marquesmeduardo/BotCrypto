@@ -30,6 +30,7 @@ O uso é bem simples:
 1. Clone o repositório e instale as dependências com `npm install`;
 2. Crie um arquivo `.env` com sua `API_KEY` e `SECRET_KEY` da Binance Testnet;
 3. Execute com `node index.js` e o bot começará a monitorar o preço e agir automaticamente.
+4. Abra o `index.html` no navegador.
 
 Exemplo de saída no terminal:
 ```

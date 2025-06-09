@@ -2,14 +2,63 @@ require('dotenv').config(); //Carrega as variáveis do .env
 
 const crypto = require("crypto"); //Biblioteca de criptografia nativa do node
 const axios = require("axios"); //Biblioteca para conexão via API
+const WebSocket = require('ws');
 
-const SYMBOL = "BTCUSDT"; //Par que será negociado
-const BUY_PRICE = 105783.11; //Preço de compra
-const SELL_PRICE = 105800; //Preço de venda
-const QUANTITY = "0.0001"; //Quantidade da moeda a ser negociada. Ex: BTC
+//=========================================================
+// === WEBSOCKET SERVER ===
+const wss = new WebSocket.Server({ port: 3001 });
+let clients = [];
 
+wss.on("connection", (ws) => {
+    clients.push(ws);
+    ws.send("[INFO] Conectado ao servidor de mensagens.");
+    ws.on("close", () => {
+        clients = clients.filter(c => c !== ws);
+    });
+});
+
+function logToClients(message) {
+    const msg = typeof message === "string" ? message : JSON.stringify(message, null, 2);
+    clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(msg);
+        }
+    });
+}
+
+// Intercepta console.log para também enviar ao front
+const originalLog = console.log;
+console.log = (...args) => {
+    const msg = args.join(" ");
+    originalLog(msg);
+    logToClients(msg);
+};
+console.warn = console.log;
+console.error = (...args) => {
+    const msg = args.join(" ");
+    originalLog("[ERRO] " + msg);
+    logToClients("[ERRO] " + msg);
+};
+
+//=========================================================
 const API_KEY = process.env.API_KEY;
 const SECRET_KEY = process.env.SECRET_KEY;
+
+const SYMBOL = "BTCUSDT"; //Par que será negociado
+const QUANTITY = "0.0100"; //Quantidade da moeda a ser negociada. Ex: BTC
+const SALDO_INICIAL_PRIM = "0.00"; //Saldo Inicial na moeda primaria. Ex: BTC
+const SALDO_INICIAL_SEC = "2000"; //Saldo Inicial na moeda secundária. Ex: USDT
+var SALDO_ATUAL_PRIM = SALDO_INICIAL_PRIM; //Saldo Atual após cada operação na moeda primária. Ex: BTC
+var SALDO_ATUAL_SEC = SALDO_INICIAL_SEC; //Saldo Atual após cada operação na moeda secundária. Ex: USDT
+
+const MARGIN = 0.01; //Margem percentual de lucro para abertura de ordem (Estratégia 4). Ex: 1 = 1%
+const STOP_LOSS = 0.1; //Valor percentual para enviar ordem de venda caso o prejuízo fique abaixo ou igual a esse valor
+var BUY_PRICE = 208470.00; //Preço de compra
+var SELL_PRICE = 105900.00; //Preço de venda
+var LAST_ORDER_PRICE = 0; //Preço da última ordem executada
+
+
+var firsOperation = true;
 
 /*
 * Spot API URL:
@@ -27,27 +76,35 @@ const API_URL = "https://testnet.binance.vision";
 let isOpened = false; //variável de controle que determina se já está comprado
 
 async function start(){
-    console.log("================");
+    //console.log("================");
     const qtdVelas = "21";
     const interval = "15m";
-    const {data} = await axios.get(API_URL + "/api/v3/klines?limit="+qtdVelas+"&interval="+interval+"&symbol=" + SYMBOL);
-    const candle = data[data.length - 1];
-    
-    const openVal = candle[1]; //Open
-    const highVal = candle[2]; //High
-    const lowVal = candle[3]; //Low
-    const price = parseFloat(candle[4]); //Close
+    try{
+        const {data} = await axios.get(API_URL + "/api/v3/klines?limit="+qtdVelas+"&interval="+interval+"&symbol=" + SYMBOL);
+        const candle = data[data.length - 1];
+        
+        const openVal = candle[1]; //Open
+        const highVal = candle[2]; //High
+        const lowVal = candle[3]; //Low
+        const price = parseFloat(candle[4]); //Close
 
-    console.log("Preço Atual: " + price);
+        //console.log("Preço Atual: " + price);
 
-    //Estratégia 1
-    //estrategiaPriceCompare(price);
+        //Estratégia 1
+        //estrategiaPriceCompare(price);
 
-    //Estratégia 2
-    //estrategiaSMA(data);
+        //Estratégia 2
+        //estrategiaSMA(data);
 
-    //Estratégia 3
-    estrategiaComparePriceSmaMargem(data, price);
+        //Estratégia 3
+        //estrategiaComparePriceSmaMargem(data, price);
+
+        //Estratégia 4
+        estrategiaMargemStartPrice(price);
+    }
+    catch(err){
+        console.log("[ERROR] ======ERRO AO EXECUTAR ORDEM======");
+    }
 }
 
 
@@ -79,7 +136,7 @@ function estrategiaPriceCompare(price){
         newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
-        console.log("Aguardar");
+        console.log("[WARN] Aguardar");
     }
 }
 
@@ -108,7 +165,7 @@ function estrategiaSMA(data){
         newOrder(SYMBOL, QUANTITY, "sell");
     }
     else {
-        console.log("Aguardar");
+        console.log("[WARN] Aguardar");
     }
 }
 
@@ -143,12 +200,65 @@ function estrategiaComparePriceSmaMargem(data, price){
     }
 }
 
+function estrategiaMargemStartPrice(price)
+{
+    //Estratégia 4: Compara com o preço da última ordem e define uma margem para nova operação
+    var buyPriceWithMargin = 0;
+    var sellPriceWithMargin = 0;
+    var stopLossPrice = 0;
+
+    if(firsOperation){
+        buyPriceWithMargin = parseFloat(BUY_PRICE);
+        sellPriceWithMargin = parseFloat(SELL_PRICE) + parseFloat(SELL_PRICE * MARGIN / 100);
+    }
+    else{
+        buyPriceWithMargin = parseFloat(LAST_ORDER_PRICE) - parseFloat(LAST_ORDER_PRICE * MARGIN / 100);
+        sellPriceWithMargin = parseFloat(LAST_ORDER_PRICE) + parseFloat(LAST_ORDER_PRICE * MARGIN / 100);
+    }
+    
+    stopLossPrice = parseFloat(buyPriceWithMargin) - parseFloat(buyPriceWithMargin * STOP_LOSS / 100);
+
+    if(price <= buyPriceWithMargin && !isOpened)
+    {
+        console.log("[BUY] " + parseFloat(price).toFixed(2));
+        LAST_ORDER_PRICE = price;
+        newOrder(SYMBOL, QUANTITY, "buy");
+    }
+    else if(price >= sellPriceWithMargin && isOpened)
+    {
+        console.log("[SELL] " + parseFloat(price).toFixed(2));
+        console.log("[SELL] Lucro: " + parseFloat(price - LAST_ORDER_PRICE).toFixed(2));
+        LAST_ORDER_PRICE = price;
+        newOrder(SYMBOL, QUANTITY, "sell");
+    }
+    else if(price <= stopLossPrice && isOpened)
+    {
+        console.log("[STOP] " + parseFloat(price).toFixed(2));
+        console.log("[STOP] Prejuízo: " + parseFloat(price - LAST_ORDER_PRICE).toFixed(2));
+        LAST_ORDER_PRICE = price;
+        newOrder(SYMBOL, QUANTITY, "sell");
+    }
+    else
+    {
+        console.log(
+            "[WARN] Aguardar... "
+            + " Preço Atual: " + parseFloat(price).toFixed(2)
+            + (isOpened ? "" : (" | Alvo BUY: " + parseFloat(buyPriceWithMargin).toFixed(2)))
+            + (isOpened ? (" | Alvo SELL: " + parseFloat(sellPriceWithMargin).toFixed(2)) : "")
+            + (isOpened ? (" | STOP LOSS: " + parseFloat(stopLossPrice).toFixed(2)) : "")
+        );
+    }
+}
+
 async function newOrder(symbol, quantity, side){
+    if(SALDO_ATUAL_SEC <= 0)
+    {
+        console.log("[INFO] Saldo baixo. Impossível realizar operação.");
+        return;
+    }
     const order = { symbol, quantity, side};
     order.type = "MARKET"; //Tipo de ordem: Mercado
     order.timestamp = Date.now(); //Pega data e hora atual da máquina
-
-    console.log(side == "buy" ? "Comprar" : (side == "sell" ? "Vender" : ""));
 
     const signature = crypto
         .createHmac("sha256", SECRET_KEY)
@@ -162,25 +272,40 @@ async function newOrder(symbol, quantity, side){
             API_URL + "/api/v3/order",
             new URLSearchParams(order).toString(),
             {headers: { "X-MBX-APIKEY": API_KEY } }
-        )
+        );
 
-        console.log(data);
-        if (side == "buy"){
-            isOpened = true;
+        isOpened = (side === "buy" ? true : false);
+        firsOperation = false;
+
+        const price = parseFloat(data.fills?.[0]?.price || LAST_ORDER_PRICE);
+        const qty = parseFloat(data.executedQty);
+
+        if (side === "buy") {
+            // Compra: gasta USDT e recebe BTC
+            const totalCost = price * qty;
+            SALDO_ATUAL_SEC = (parseFloat(SALDO_ATUAL_SEC) - totalCost).toFixed(8);
+            SALDO_ATUAL_PRIM = (parseFloat(SALDO_ATUAL_PRIM) + qty).toFixed(8);
+        } else {
+            // Venda: gasta BTC e recebe USDT
+            const totalGain = price * qty;
+            SALDO_ATUAL_PRIM = (parseFloat(SALDO_ATUAL_PRIM) - qty).toFixed(8);
+            SALDO_ATUAL_SEC = (parseFloat(SALDO_ATUAL_SEC) + totalGain).toFixed(8);
         }
-        else if (side == "sell"){
-            isOpened = false;
-        }
-        console.log("=====SUCESSO====");
+        
+        console.log(side === "buy" ? "[BUY] Comprado" : (side === "stop" ? "[STOP] Vendido" : "[SELL] Vendido"));
+
+
+        logToClients(`[SALDO] ${SALDO_INICIAL_PRIM},${SALDO_INICIAL_SEC},${SALDO_ATUAL_PRIM},${SALDO_ATUAL_SEC}`);
     }
     catch(err){
-        console.warn("======ERRO======");
-        console.error(err.response.data);
+        console.log("[ERROR] ======ERRO AO EXECUTAR ORDEM======");
+        //console.log(err.response?.data || err.message);
         isOpened = false;
     }
 }
 
-setInterval(start, 3000);
+
 
 console.clear();
 start();
+setInterval(start, 3000);

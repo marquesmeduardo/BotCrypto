@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOT DE TRADING | BTCUSDT</title>
+  <style>
+    body {
+      font-family: "Courier New", monospace;
+      background-color: #000;
+      color: #00FF00;
+      margin: 0;
+      padding: 10px;
+    }
+    h1 {
+      color: #00FF00;
+    }
+    #box-container{
+      display: flex;
+    }
+    .log-container, .log-container-order {
+      border: 1px solid #00FF00;
+      padding: 10px;
+      margin-bottom: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+      background-color: #111;
+    }
+    .log-entry {
+      margin: 5px 0;
+    }
+    .log-entry.info { color: #00a2ff; }
+    .log-entry.warn { color: #FFFF00; }
+    .log-entry.error { color: #FF0000; }
+    .log-entry.buy { color: #00FF00; background-color: #002200; }
+    .log-entry.sell { color: #FF0000; background-color: #220000; }
+    .log-entry.stop { color: #FFFFFF; background-color: #333333; }
+
+    .saldos {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 5px 10px;
+      margin-bottom: 20px;
+      font-size: 18px;
+    }
+    .saldoAtual {
+      font-weight: bold;
+    }
+    .saldoPositivo { color: #00FF00; }
+    .saldoNegativo { color: #FF0000; }
+  </style>
+</head>
+<body>
+  <h1>BOT DE TRADING</h1>
+  
+  <div class="saldos">
+    <div>BTC (inicial):</div><div id="saldoInicialPrim"></div>
+    <div>USDT (inicial):</div><div id="saldoInicialSec"></div>
+    <div>BTC (atual):</div><div class="saldoAtual" id="saldoAtualPrim"></div>
+    <div>USDT (atual):</div><div class="saldoAtual" id="saldoAtualSec"></div>
+  </div>
+
+  <did id="box-container">
+    <div class="log-container" id="logContainer"></div>
+    <div class="log-container-order" id="logContainerOrder"></div>
+  </did>
+
+  <script>
+    const ws = new WebSocket('ws://localhost:3001');
+    const logContainer = document.getElementById('logContainer');
+    const logContainerOrder = document.getElementById('logContainerOrder');
+
+    function atualizarSaldos(btcInicial, usdtInicial, btcAtual, usdtAtual) {
+      document.getElementById('saldoInicialPrim').textContent = btcInicial;
+      document.getElementById('saldoInicialSec').textContent = usdtInicial;
+      document.getElementById('saldoAtualPrim').textContent = btcAtual;
+      document.getElementById('saldoAtualSec').textContent = usdtAtual;
+
+      document.getElementById('saldoAtualPrim').className = `saldoAtual ${parseFloat(btcAtual) >= parseFloat(btcInicial) ? 'saldoPositivo' : 'saldoNegativo'}`;
+      document.getElementById('saldoAtualSec').className = `saldoAtual ${parseFloat(usdtAtual) >= parseFloat(usdtInicial) ? 'saldoPositivo' : 'saldoNegativo'}`;
+    }
+
+    ws.onmessage = function(event) {
+      const [type, ...rest] = event.data.split(']');
+      const content = rest.join(']').trim();
+      const logType = type.slice(1);
+
+      if (logType === "SALDO") {
+        const [btcInicial, usdtInicial, btcAtual, usdtAtual] = content.split(",");
+        atualizarSaldos(btcInicial, usdtInicial, btcAtual, usdtAtual);
+        return;
+      }
+
+      const el = document.createElement('div');
+      el.classList.add('log-entry');
+
+      if (logType === "BUY") el.classList.add('buy');
+      else if (logType === "SELL") el.classList.add('sell');
+      else if (logType === "STOP") el.classList.add('stop');
+      else el.classList.add(logType.toLowerCase());
+
+      el.textContent = decorate(logType, content);
+
+      //el.textContent = event.data;
+
+      logContainer.appendChild(el);
+
+      if (["BUY", "SELL", "STOP"].includes(logType)) {
+        logContainerOrder.appendChild(el.cloneNode(true));
+      }
+
+      logContainer.scrollTop = logContainer.scrollHeight;
+      logContainerOrder.scrollTop = logContainerOrder.scrollHeight;
+    };
+
+    function decorate(type, msg) {
+      switch (type) {
+        case "INFO":  return "ⓘ " + msg;
+        case "WARN":  return "⚠️ " + msg;
+        case "ERROR": return "❌ " + msg;
+        case "BUY":   return "🟢 Comprando → " + msg;
+        case "SELL":  return "🔴 Vendendo → " + msg;
+        case "STOP":  return "🔴 Stop → " + msg;
+        default:      return msg;
+      }
+    }
+  </script>
+</body>
+</html>
